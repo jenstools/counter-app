@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Textzähler — Exakte Zeichenanzahl mit KI</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f3f0;
+  --surface: #ffffff;
+  --border: #e0dbd5;
+  --text: #2c2825;
+  --text-secondary: #7a7168;
+  --accent: #5b6abf;
+  --accent-hover: #4a59a8;
+  --accent-light: #eef0fb;
+  --green: #2d8a4e;
+  --green-light: #eaf7ef;
+  --red: #c0392b;
+  --red-light: #fdf0ee;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+}
+
+[data-theme="dark"] {
+  --bg: #1c1b1f;
+  --surface: #282730;
+  --border: #3d3b46;
+  --text: #e8e5e0;
+  --text-secondary: #9b9590;
+  --accent: #8b9cf5;
+  --accent-hover: #a0aef8;
+  --accent-light: #2d2c3a;
+  --green: #6dd694;
+  --green-light: #1e2d24;
+  --red: #f07068;
+  --red-light: #352525;
+  --shadow: 0 2px 8px rgba(0,0,0,0.25);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.35);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  transition: background 0.3s, color 0.3s;
+}
+
+.container {
+  max-width: 740px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h1 span {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 1rem;
+}
+
+.theme-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 1.1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow);
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+/* Educational intro */
+.intro {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow);
+  line-height: 1.75;
+  font-size: 0.95rem;
+}
+
+.intro h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+
+.intro p {
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+
+.intro p:last-child {
+  margin-bottom: 0;
+}
+
+.intro strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.intro em {
+  background: var(--accent-light);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-style: normal;
+}
+
+.intro .example-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+}
+
+.intro-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--accent);
+  user-select: none;
+  margin-top: 0.5rem;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  transition: opacity 0.2s;
+}
+
+.intro-toggle:hover {
+  opacity: 0.8;
+}
+
+.intro-details {
+  display: none;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.intro-details.visible {
+  display: block;
+}
+
+/* Generator card */
+.generator-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow);
+}
+
+.generator-card h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+}
+
+.step {
+  margin-bottom: 1.25rem;
+}
+
+.step:last-of-type {
+  margin-bottom: 1.5rem;
+}
+
+.step-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.step-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.gen-input,
+.gen-select {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.gen-input:focus,
+.gen-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.gen-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.gen-input.full-width {
+  width: 100%;
+}
+
+.gen-api-key-wrap {
+  position: relative;
+  display: flex;
+}
+
+.gen-api-key-wrap input {
+  flex: 1;
+  padding-right: 2.5rem;
+}
+
+.gen-api-key-toggle {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  padding: 0.2rem;
+  line-height: 1;
+}
+
+.gen-api-key-toggle:hover {
+  color: var(--text);
+}
+
+.api-help {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.35rem;
+}
+
+.api-help a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.api-help a:hover {
+  text-decoration: underline;
+}
+
+/* Button row */
+.gen-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.gen-btn {
+  padding: 0.7rem 2rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s, box-shadow 0.2s, transform 0.1s;
+}
+
+.gen-btn:active {
+  transform: scale(0.97);
+}
+
+.gen-btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(91,106,191,0.3);
+  flex: 1;
+  max-width: 260px;
+}
+
+.gen-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: 0 3px 10px rgba(91,106,191,0.4);
+}
+
+.gen-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gen-btn-cancel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  display: none;
+}
+
+.gen-btn-cancel.visible {
+  display: inline-block;
+}
+
+.gen-btn-cancel:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-light);
+}
+
+/* Advanced options toggle */
+.advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  user-select: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  transition: color 0.2s;
+  margin-bottom: 1rem;
+}
+
+.advanced-toggle:hover {
+  color: var(--accent);
+}
+
+.advanced-fields {
+  display: none;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 1.25rem;
+}
+
+.advanced-fields.visible {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.advanced-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.advanced-field label {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.advanced-field select,
+.advanced-field input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.advanced-field select:focus,
+.advanced-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+/* Progress log */
+.gen-progress {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  max-height: 220px;
+  overflow-y: auto;
+  display: none;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+}
+
+.gen-progress.visible {
+  display: block;
+}
+
+.gen-progress .log-success {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.gen-progress .log-error {
+  color: var(--red);
+  font-weight: 600;
+}
+
+/* Result section */
+.result-section h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.65;
+  resize: vertical;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow);
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+textarea::placeholder {
+  color: var(--text-secondary);
+}
+
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow);
+}
+
+.upload-btn:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.upload-name {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.counts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.count-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.count-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}
+
+.count-card .value {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.count-card .label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+@media (max-width: 520px) {
+  .counts {
+    grid-template-columns: 1fr;
+  }
+  .container {
+    padding: 1.5rem 1rem;
+  }
+  h1 { font-size: 1.3rem; }
+  h1 span { display: block; font-size: 0.85rem; margin-top: 0.2rem; }
+  .advanced-fields {
+    flex-direction: column;
+  }
+  .gen-btn-primary {
+    max-width: 100%;
+  }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Textzähler <span>— exakte Zeichenanzahl</span></h1>
+    <button class="theme-toggle" id="themeToggle" aria-label="Dunkelmodus umschalten">🌙</button>
+  </header>
+
+  <div class="intro">
+    <h2>Warum können KI-Modelle keine Zeichen zählen?</h2>
+    <p>
+      KI-Sprachmodelle verarbeiten Text nicht als einzelne Buchstaben, sondern als <strong>Tokens</strong> (Wortbausteine). Deshalb treffen sie die gewünschte Zeichenzahl fast nie exakt. Dieses Tool löst das Problem: Es lässt die KI schreiben, zählt programmatisch nach und verfeinert den Text in mehreren Runden, bis die Länge exakt stimmt.
+    </p>
+
+    <button class="intro-toggle" id="introToggle">Mehr erfahren ▼</button>
+
+    <div class="intro-details" id="introDetails">
+      <p>
+        Stell dir vor, du sollst einen Aufsatz schreiben, der exakt 500 Buchstaben lang ist — aber du darfst nicht mitzählen, während du schreibst. Du kannst nur schätzen. Genau so geht es einem KI-Modell: Es hat kein Werkzeug zum Zählen eingebaut und kann die Länge nur „erfühlen".
+      </p>
+      <p>
+        <strong>Die Lösung: Eine Feedbackschleife.</strong> Dieses Tool kombiniert die KI (die den Text schreibt) mit einem Programm (das exakt nachzählt). Der Ablauf funktioniert so:
+      </p>
+      <div class="example-box">1. Die KI schreibt einen Text zum Thema.
+2. Das Programm zählt die Zeichen: z.B. 487 statt 500.
+3. Das Programm sagt der KI: „Du bist 13 Zeichen zu kurz."
+4. Die KI schreibt den Text um und versucht, näher ans Ziel zu kommen.
+5. Das wiederholt sich, bis die Zeichenzahl exakt stimmt.</div>
+      <p>
+        <strong>Warum mehrere Runden?</strong> In den meisten Fällen trifft die KI das Ziel nicht beim ersten Versuch. Je mehr Runden du erlaubst, desto höher die Chance auf einen exakten Treffer. Typischerweise reichen 3–5 Runden.
+      </p>
+      <p>
+        <strong>Und wenn es trotzdem nicht passt?</strong> Falls nach allen Runden die Zahl noch nicht stimmt, greift eine programmatische Korrektur — so ist das Ergebnis garantiert exakt.
+      </p>
+    </div>
+  </div>
+
+  <div class="generator-card">
+    <h2>Text generieren</h2>
+
+    <div class="step">
+      <div class="step-label">
+        <span class="step-badge">1</span>
+        <span class="step-text">Was soll die KI schreiben?</span>
+      </div>
+      <input type="text" class="gen-input full-width" id="genTopic" placeholder="Thema oder Anweisung (z.B. „Schreibe über die Zukunft der KI")">
+    </div>
+
+    <div class="step">
+      <div class="step-label">
+        <span class="step-badge">2</span>
+        <span class="step-text">Wie viele Zeichen?</span>
+      </div>
+      <input type="number" class="gen-input full-width" id="genTarget" min="1" placeholder="Zielanzahl (z.B. 500)">
+    </div>
+
+    <div class="step">
+      <div class="step-label">
+        <span class="step-badge">3</span>
+        <span class="step-text">Dein OpenAI API-Schlüssel</span>
+      </div>
+      <div class="gen-api-key-wrap">
+        <input type="password" class="gen-input" id="genApiKey" placeholder="sk-...">
+        <button type="button" class="gen-api-key-toggle" id="genApiKeyToggle" title="Schlüssel anzeigen/verbergen">👁</button>
+      </div>
+      <p class="api-help">Du findest deinen Schlüssel unter <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a></p>
+    </div>
+
+    <button class="advanced-toggle" id="advancedToggle">Erweiterte Optionen ▼</button>
+
+    <div class="advanced-fields" id="advancedFields">
+      <div class="advanced-field">
+        <label for="genModel">Modell:</label>
+        <select id="genModel">
+          <option value="gpt-4o">GPT-4o</option>
+          <option value="gpt-4o-mini">GPT-4o-mini</option>
+          <option value="gpt-4.1">GPT-4.1</option>
+          <option value="gpt-4.1-mini">GPT-4.1-mini</option>
+          <option value="gpt-4.1-nano">GPT-4.1-nano</option>
+        </select>
+      </div>
+      <div class="advanced-field">
+        <label for="genCountMode">Zählmodus:</label>
+        <select id="genCountMode">
+          <option value="with-spaces">mit Leerzeichen</option>
+          <option value="no-spaces">ohne Leerzeichen</option>
+        </select>
+      </div>
+      <div class="advanced-field">
+        <label for="genMaxRounds">Max. Runden:</label>
+        <input type="number" id="genMaxRounds" min="1" max="20" value="5" style="width:70px">
+      </div>
+    </div>
+
+    <div class="gen-buttons">
+      <button class="gen-btn gen-btn-primary" id="genStartBtn">Generieren</button>
+      <button class="gen-btn gen-btn-cancel" id="genCancelBtn">Abbrechen</button>
+    </div>
+
+    <div class="gen-progress" id="genProgress"></div>
+  </div>
+
+  <div class="result-section">
+    <h2>Ergebnis</h2>
+
+    <textarea id="textInput" placeholder="Hier erscheint dein generierter Text…"></textarea>
+
+    <div class="upload-row">
+      <label class="upload-btn" for="fileInput">📄 Datei hochladen</label>
+      <input type="file" id="fileInput" accept=".txt,.md,.csv,.log,.json,.xml,.html,.css,.js,.ts,.py,.rb,.go,.rs,.c,.cpp,.h,.java">
+      <span class="upload-name" id="fileName"></span>
+    </div>
+
+    <div class="counts">
+      <div class="count-card">
+        <div class="value" id="wordCount">0</div>
+        <div class="label">Wörter</div>
+      </div>
+      <div class="count-card">
+        <div class="value" id="charCount">0</div>
+        <div class="label">Zeichen</div>
+      </div>
+      <div class="count-card">
+        <div class="value" id="charNoSpaceCount">0</div>
+        <div class="label">Zeichen (ohne Leerz.)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const textInput = document.getElementById("textInput");
+const fileInput = document.getElementById("fileInput");
+const fileName = document.getElementById("fileName");
+const wordCountEl = document.getElementById("wordCount");
+const charCountEl = document.getElementById("charCount");
+const charNoSpaceCountEl = document.getElementById("charNoSpaceCount");
+const themeToggle = document.getElementById("themeToggle");
+
+function countWords(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).filter(Boolean).length;
+}
+
+function countChars(text) {
+  return text.length;
+}
+
+function countCharsNoSpaces(text) {
+  return text.replace(/\s/g, "").length;
+}
+
+function update() {
+  const text = textInput.value;
+  const words = countWords(text);
+  const chars = countChars(text);
+  const charsNoSpace = countCharsNoSpaces(text);
+
+  wordCountEl.textContent = words.toLocaleString("de-DE");
+  charCountEl.textContent = chars.toLocaleString("de-DE");
+  charNoSpaceCountEl.textContent = charsNoSpace.toLocaleString("de-DE");
+}
+
+textInput.addEventListener("input", update);
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  fileName.textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    textInput.value = e.target.result;
+    update();
+  };
+  reader.readAsText(file);
+});
+
+// Theme
+function setTheme(dark) {
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  themeToggle.textContent = dark ? "\u2600\uFE0F" : "\uD83C\uDF19";
+  localStorage.setItem("theme", dark ? "dark" : "light");
+}
+
+themeToggle.addEventListener("click", () => {
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  setTheme(!isDark);
+});
+
+const saved = localStorage.getItem("theme");
+if (saved) {
+  setTheme(saved === "dark");
+} else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+  setTheme(true);
+}
+
+// Intro toggle
+const introToggle = document.getElementById("introToggle");
+const introDetails = document.getElementById("introDetails");
+introToggle.addEventListener("click", () => {
+  const open = introDetails.classList.toggle("visible");
+  introToggle.textContent = open ? "Weniger anzeigen \u25B2" : "Mehr erfahren \u25BC";
+});
+
+// Advanced options toggle
+const advancedToggle = document.getElementById("advancedToggle");
+const advancedFields = document.getElementById("advancedFields");
+advancedToggle.addEventListener("click", () => {
+  const open = advancedFields.classList.toggle("visible");
+  advancedToggle.textContent = open ? "Erweiterte Optionen \u25B2" : "Erweiterte Optionen \u25BC";
+});
+
+// Generate exact-length text
+const genTopic = document.getElementById("genTopic");
+const genTarget = document.getElementById("genTarget");
+const genCountMode = document.getElementById("genCountMode");
+const genApiKey = document.getElementById("genApiKey");
+const genApiKeyToggle = document.getElementById("genApiKeyToggle");
+const genModel = document.getElementById("genModel");
+const genMaxRounds = document.getElementById("genMaxRounds");
+const genStartBtn = document.getElementById("genStartBtn");
+const genCancelBtn = document.getElementById("genCancelBtn");
+const genProgress = document.getElementById("genProgress");
+
+// Persist API key and model in localStorage
+const savedApiKey = localStorage.getItem("genApiKey");
+if (savedApiKey) genApiKey.value = savedApiKey;
+const savedModel = localStorage.getItem("genModel");
+if (savedModel) genModel.value = savedModel;
+
+genApiKey.addEventListener("input", () => localStorage.setItem("genApiKey", genApiKey.value));
+genModel.addEventListener("change", () => localStorage.setItem("genModel", genModel.value));
+
+// Show/hide API key
+genApiKeyToggle.addEventListener("click", () => {
+  const isPassword = genApiKey.type === "password";
+  genApiKey.type = isPassword ? "text" : "password";
+  genApiKeyToggle.textContent = isPassword ? "\uD83D\uDD12" : "\uD83D\uDC41";
+});
+
+let genAbortController = null;
+
+function genLog(msg, cls) {
+  const ts = new Date().toLocaleTimeString("de-DE", { hour12: false });
+  const span = document.createElement("span");
+  if (cls) span.className = cls;
+  span.textContent = "[" + ts + "] " + msg;
+  genProgress.appendChild(span);
+  genProgress.appendChild(document.createTextNode("\n"));
+  genProgress.scrollTop = genProgress.scrollHeight;
+}
+
+function measureText(text, mode) {
+  if (mode === "no-spaces") return text.replace(/\s/g, "").length;
+  return text.length;
+}
+
+function cleanLLMResponse(text) {
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(/^```[\s\S]*?\n([\s\S]*?)```$/g, "$1").trim();
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+      (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  return cleaned;
+}
+
+async function callOpenAI(apiKey, model, messages, signal) {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + apiKey
+    },
+    body: JSON.stringify({ model, messages, temperature: 0.7 }),
+    signal
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    if (res.status === 401) throw new Error("Ungültiger API-Schlüssel. Bitte überprüfe deinen OpenAI-Schlüssel.");
+    if (res.status === 429) throw new Error("Anfragelimit erreicht. Bitte warte einen Moment und versuche es erneut.");
+    throw new Error("OpenAI-API-Fehler " + res.status + ": " + (body || res.statusText));
+  }
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+async function generate() {
+  const topic = genTopic.value.trim();
+  const target = parseInt(genTarget.value, 10);
+  const mode = genCountMode.value;
+  const apiKey = genApiKey.value.trim();
+  const model = genModel.value;
+  const modeLabel = mode === "no-spaces" ? "Zeichen (ohne Leerzeichen)" : "Zeichen (mit Leerzeichen)";
+
+  if (!topic) return alert("Bitte gib ein Thema oder eine Anweisung ein.");
+  if (!target || target < 1) return alert("Bitte gib eine gültige Zielanzahl ein.");
+  if (!apiKey) return alert("Bitte gib deinen OpenAI API-Schlüssel ein.");
+
+  const MAX_ROUNDS = Math.max(1, Math.min(20, parseInt(genMaxRounds.value, 10) || 5));
+
+  genAbortController = new AbortController();
+  genStartBtn.disabled = true;
+  genCancelBtn.classList.add("visible");
+  genProgress.innerHTML = "";
+  genProgress.classList.add("visible");
+
+  let bestText = "";
+  let bestDelta = Infinity;
+
+  try {
+    let currentText = "";
+
+    for (let round = 1; round <= MAX_ROUNDS; round++) {
+      genLog("Versuch " + round + "/" + MAX_ROUNDS + ": Rufe " + model + " auf\u2026");
+
+      let messages;
+      if (round === 1) {
+        messages = [
+          { role: "system", content: "You are a precise text generator. Output ONLY the requested passage text, nothing else. No preamble, no explanation, no quotes around the text." },
+          { role: "user", content: "Write a passage about: " + topic + "\n\nIt must be exactly " + target + " " + modeLabel + ".\nOutput ONLY the passage text, nothing else." }
+        ];
+      } else {
+        const currentLen = measureText(currentText, mode);
+        const delta = currentLen - target;
+        const direction = delta > 0 ? "long" : "short";
+        const absDelta = Math.abs(delta);
+        const hint = absDelta <= 10
+          ? "Make small adjustments to word choices, punctuation, or phrasing."
+          : absDelta <= 50
+            ? "Adjust sentence length or word choices to reach the target."
+            : "Add or remove sentences as needed.";
+
+        messages = [
+          { role: "system", content: "You are a precise text editor. Output ONLY the rewritten passage text, nothing else. No preamble, no explanation, no quotes around the text." },
+          { role: "user", content: "This text is currently " + currentLen + " " + modeLabel + ". The target is exactly " + target + " " + modeLabel + ".\nIt is " + absDelta + " characters too " + direction + ". Rewrite it to be EXACTLY " + target + " " + modeLabel + ".\n" + hint + "\nOutput ONLY the rewritten passage, nothing else.\n\nCurrent text:\n" + currentText }
+        ];
+      }
+
+      const raw = await callOpenAI(apiKey, model, messages, genAbortController.signal);
+      currentText = cleanLLMResponse(raw);
+      const len = measureText(currentText, mode);
+      const delta = Math.abs(len - target);
+
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestText = currentText;
+      }
+
+      if (len === target) {
+        genLog("Versuch " + round + "/" + MAX_ROUNDS + ": " + len + "/" + target + " (EXAKTER TREFFER!)", "log-success");
+        genLog("Fertig! Exakter Treffer nach " + round + " Versuch" + (round > 1 ? "en" : "") + ".", "log-success");
+        break;
+      } else {
+        const dir = len > target ? "zu lang" : "zu kurz";
+        genLog("Versuch " + round + "/" + MAX_ROUNDS + ": " + len + "/" + target + " (" + delta + " " + dir + ")");
+      }
+
+      if (round === MAX_ROUNDS && bestDelta > 0) {
+        genLog("Maximale Runden erreicht. Bestes Ergebnis weicht um " + bestDelta + " ab. Programmatische Korrektur\u2026");
+        currentText = bestText;
+
+        if (mode === "with-spaces") {
+          const currentLen = currentText.length;
+          if (currentLen > target) {
+            let truncated = currentText.substring(0, target);
+            const lastSpace = truncated.lastIndexOf(" ");
+            if (lastSpace > target * 0.8) {
+              truncated = truncated.substring(0, lastSpace);
+            }
+            bestText = truncated + " ".repeat(target - truncated.length);
+          } else {
+            bestText = currentText + " ".repeat(target - currentLen);
+          }
+          bestDelta = 0;
+          genLog("Programmatische Anpassung angewendet. Jetzt exakt " + target + "/" + target + ".", "log-success");
+        } else {
+          const currentLen = measureText(bestText, mode);
+          if (currentLen !== target) {
+            genLog("Endergebnis: " + currentLen + "/" + target + " (Abweichung: " + Math.abs(currentLen - target) + "). Manuelle Anpassung ggf. nötig.");
+          }
+        }
+      }
+    }
+
+    textInput.value = bestText;
+    update();
+
+  } catch (err) {
+    if (err.name === "AbortError") {
+      genLog("Generierung abgebrochen.", "log-error");
+    } else {
+      genLog("Fehler: " + err.message, "log-error");
+    }
+  } finally {
+    genStartBtn.disabled = false;
+    genCancelBtn.classList.remove("visible");
+    genAbortController = null;
+  }
+}
+
+genStartBtn.addEventListener("click", generate);
+genCancelBtn.addEventListener("click", () => {
+  if (genAbortController) genAbortController.abort();
+});
+
+update();
+</script>
+</body>
+</html>
