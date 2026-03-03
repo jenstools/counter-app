@@ -592,7 +592,7 @@ input[type="file"] {
   <div class="intro">
     <h2>Warum können KI-Modelle keine Zeichen zählen?</h2>
     <p>
-      KI-Sprachmodelle verarbeiten Text nicht als einzelne Buchstaben, sondern als <strong>Tokens</strong> (Wortbausteine). Deshalb treffen sie die gewünschte Zeichenzahl fast nie exakt. Dieses Tool löst das Problem: Es lässt die KI schreiben, zählt programmatisch nach und verfeinert den Text in mehreren Runden, bis die Länge exakt stimmt.
+      KI-Sprachmodelle verarbeiten Text nicht als einzelne Buchstaben, sondern als <strong>Tokens</strong> (Wortbausteine). Deshalb treffen sie die gewünschte Zeichenzahl fast nie exakt. Dieses Tool löst das Problem mit einem cleveren Ansatz: Die KI schreibt zuerst bewusst länger als nötig, dann wird der Text gezielt auf die exakte Zeichenzahl gekürzt.
     </p>
 
     <button class="intro-toggle" id="introToggle">Mehr erfahren ▼</button>
@@ -602,15 +602,14 @@ input[type="file"] {
         Stell dir vor, du sollst einen Aufsatz schreiben, der exakt 500 Buchstaben lang ist — aber du darfst nicht mitzählen, während du schreibst. Du kannst nur schätzen. Genau so geht es einem KI-Modell: Es hat kein Werkzeug zum Zählen eingebaut und kann die Länge nur „erfühlen".
       </p>
       <p>
-        <strong>Die Lösung: Eine Feedbackschleife.</strong> Dieses Tool kombiniert die KI (die den Text schreibt) mit einem Programm (das exakt nachzählt). Der Ablauf funktioniert so:
+        <strong>Die Lösung: Lang schreiben, dann kürzen.</strong> Dieses Tool nutzt einen cleveren Ansatz: Statt die KI auf eine exakte Zeichenzahl zu zwingen (was sie schlecht kann), lässt es sie zuerst frei und etwas zu lang schreiben — und kürzt dann gezielt. Der Ablauf:
       </p>
-      <div class="example-box">1. Die KI schreibt einen Text zum Thema.
-2. Das Programm zählt die Zeichen: z.B. 487 statt 500.
-3. Das Programm sagt der KI: „Du bist 13 Zeichen zu kurz."
-4. Die KI schreibt den Text um und versucht, näher ans Ziel zu kommen.
-5. Das wiederholt sich, bis die Zeichenzahl exakt stimmt.</div>
+      <div class="example-box">1. Die KI schreibt einen bewusst längeren Entwurf (~30 % über dem Ziel).
+2. Das Programm zählt die Zeichen: z.B. 650 statt Ziel 500.
+3. Die KI kürzt den Entwurf gezielt auf exakt 500 Zeichen.
+4. Falls nötig: Feinjustierung in weiteren Runden, bis es exakt passt.</div>
       <p>
-        <strong>Warum mehrere Runden?</strong> In den meisten Fällen trifft die KI das Ziel nicht beim ersten Versuch. Je mehr Runden du erlaubst, desto höher die Chance auf einen exakten Treffer. Typischerweise reichen 3–5 Runden.
+        <strong>Warum dieser Ansatz?</strong> In Runde 1 kann sich die KI voll auf Qualität und Inhalt konzentrieren — ohne Zeichendruck. Das Kürzen in Runde 2 ist viel einfacher, weil der Text schon existiert. Typischerweise reichen 2–3 Runden.
       </p>
       <p>
         <strong>Und wenn es trotzdem nicht passt?</strong> Falls nach allen Runden die Zahl noch nicht stimmt, greift eine programmatische Korrektur — so ist das Ergebnis garantiert exakt.
@@ -894,53 +893,98 @@ async function generate() {
 
   try {
     let currentText = "";
+    let round = 0;
 
-    for (let round = 1; round <= MAX_ROUNDS; round++) {
-      genLog("Versuch " + round + "/" + MAX_ROUNDS + ": Rufe " + model + " auf\u2026");
+    // --- Phase 1: Generate long (~30% over target) ---
+    round++;
+    const longTarget = Math.round(target * 1.3);
+    genLog("Schritt 1/" + MAX_ROUNDS + ": Erstelle Entwurf (~" + longTarget + " " + modeLabel + ")\u2026");
 
-      let messages;
-      if (round === 1) {
-        messages = [
-          { role: "system", content: "You are a precise text generator. Output ONLY the requested passage text, nothing else. No preamble, no explanation, no quotes around the text." },
-          { role: "user", content: "Write a passage about: " + topic + "\n\nIt must be exactly " + target + " " + modeLabel + ".\nOutput ONLY the passage text, nothing else." }
-        ];
-      } else {
+    const draftMessages = [
+      { role: "system", content: "You are a skilled writer. Write a coherent, well-structured passage. Output ONLY the passage text, nothing else. No preamble, no explanation, no quotes around the text." },
+      { role: "user", content: "Write about: " + topic + "\n\nAim for approximately " + longTarget + " " + modeLabel + ".\nOutput ONLY the passage text, nothing else." }
+    ];
+
+    let raw = await callOpenAI(apiKey, model, draftMessages, genAbortController.signal);
+    currentText = cleanLLMResponse(raw);
+    let len = measureText(currentText, mode);
+    let delta = Math.abs(len - target);
+
+    if (delta < bestDelta) { bestDelta = delta; bestText = currentText; }
+
+    if (len === target) {
+      genLog("Schritt 1/" + MAX_ROUNDS + ": " + len + "/" + target + " (EXAKTER TREFFER!)", "log-success");
+      genLog("Fertig! Exakter Treffer nach 1 Schritt.", "log-success");
+    } else {
+      const dir = len > target ? "zu lang" : "zu kurz";
+      genLog("Schritt 1/" + MAX_ROUNDS + ": Entwurf hat " + len + "/" + target + " (" + delta + " " + dir + ")");
+
+      // --- Phase 2: Shorten to exact target ---
+      if (round < MAX_ROUNDS && len !== target) {
+        round++;
+        genLog("Schritt 2/" + MAX_ROUNDS + ": K\u00fcrze auf exakt " + target + " " + modeLabel + "\u2026");
+
         const currentLen = measureText(currentText, mode);
-        const delta = currentLen - target;
-        const direction = delta > 0 ? "long" : "short";
-        const absDelta = Math.abs(delta);
-        const hint = absDelta <= 10
-          ? "Make small adjustments to word choices, punctuation, or phrasing."
-          : absDelta <= 50
-            ? "Adjust sentence length or word choices to reach the target."
-            : "Add or remove sentences as needed.";
-
-        messages = [
+        const shortenMessages = [
           { role: "system", content: "You are a precise text editor. Output ONLY the rewritten passage text, nothing else. No preamble, no explanation, no quotes around the text." },
-          { role: "user", content: "This text is currently " + currentLen + " " + modeLabel + ". The target is exactly " + target + " " + modeLabel + ".\nIt is " + absDelta + " characters too " + direction + ". Rewrite it to be EXACTLY " + target + " " + modeLabel + ".\n" + hint + "\nOutput ONLY the rewritten passage, nothing else.\n\nCurrent text:\n" + currentText }
+          { role: "user", content: "This text is currently " + currentLen + " " + modeLabel + ". The target is exactly " + target + " " + modeLabel + ".\nShorten or adjust it to exactly " + target + " " + modeLabel + ". Keep the same structure and flow. Tighten phrasing, remove filler.\nOutput ONLY the rewritten passage, nothing else.\n\nCurrent text:\n" + currentText }
         ];
+
+        raw = await callOpenAI(apiKey, model, shortenMessages, genAbortController.signal);
+        currentText = cleanLLMResponse(raw);
+        len = measureText(currentText, mode);
+        delta = Math.abs(len - target);
+
+        if (delta < bestDelta) { bestDelta = delta; bestText = currentText; }
+
+        if (len === target) {
+          genLog("Schritt 2/" + MAX_ROUNDS + ": " + len + "/" + target + " (EXAKTER TREFFER!)", "log-success");
+          genLog("Fertig! Exakter Treffer nach 2 Schritten.", "log-success");
+        } else {
+          const dir2 = len > target ? "zu lang" : "zu kurz";
+          genLog("Schritt 2/" + MAX_ROUNDS + ": " + len + "/" + target + " (" + delta + " " + dir2 + ")");
+
+          // --- Phase 3: Fine-tune (targeted refinement) ---
+          while (round < MAX_ROUNDS && len !== target) {
+            round++;
+            genLog("Schritt " + round + "/" + MAX_ROUNDS + ": Feinjustierung\u2026");
+
+            const curLen = measureText(currentText, mode);
+            const d = curLen - target;
+            const direction = d > 0 ? "long" : "short";
+            const absD = Math.abs(d);
+            const hint = absD <= 10
+              ? "Make small adjustments to word choices, punctuation, or phrasing."
+              : absD <= 50
+                ? "Adjust sentence length or word choices to reach the target."
+                : "Add or remove sentences as needed.";
+
+            const finetuneMessages = [
+              { role: "system", content: "You are a precise text editor. Output ONLY the rewritten passage text, nothing else. No preamble, no explanation, no quotes around the text." },
+              { role: "user", content: "This text is currently " + curLen + " " + modeLabel + ". The target is exactly " + target + " " + modeLabel + ".\nIt is " + absD + " characters too " + direction + ". Rewrite it to be EXACTLY " + target + " " + modeLabel + ".\n" + hint + "\nOutput ONLY the rewritten passage, nothing else.\n\nCurrent text:\n" + currentText }
+            ];
+
+            raw = await callOpenAI(apiKey, model, finetuneMessages, genAbortController.signal);
+            currentText = cleanLLMResponse(raw);
+            len = measureText(currentText, mode);
+            delta = Math.abs(len - target);
+
+            if (delta < bestDelta) { bestDelta = delta; bestText = currentText; }
+
+            if (len === target) {
+              genLog("Schritt " + round + "/" + MAX_ROUNDS + ": " + len + "/" + target + " (EXAKTER TREFFER!)", "log-success");
+              genLog("Fertig! Exakter Treffer nach " + round + " Schritten.", "log-success");
+              break;
+            } else {
+              const dir3 = len > target ? "zu lang" : "zu kurz";
+              genLog("Schritt " + round + "/" + MAX_ROUNDS + ": " + len + "/" + target + " (" + delta + " " + dir3 + ")");
+            }
+          }
+        }
       }
 
-      const raw = await callOpenAI(apiKey, model, messages, genAbortController.signal);
-      currentText = cleanLLMResponse(raw);
-      const len = measureText(currentText, mode);
-      const delta = Math.abs(len - target);
-
-      if (delta < bestDelta) {
-        bestDelta = delta;
-        bestText = currentText;
-      }
-
-      if (len === target) {
-        genLog("Versuch " + round + "/" + MAX_ROUNDS + ": " + len + "/" + target + " (EXAKTER TREFFER!)", "log-success");
-        genLog("Fertig! Exakter Treffer nach " + round + " Versuch" + (round > 1 ? "en" : "") + ".", "log-success");
-        break;
-      } else {
-        const dir = len > target ? "zu lang" : "zu kurz";
-        genLog("Versuch " + round + "/" + MAX_ROUNDS + ": " + len + "/" + target + " (" + delta + " " + dir + ")");
-      }
-
-      if (round === MAX_ROUNDS && bestDelta > 0) {
+      // --- Programmatic fallback ---
+      if (bestDelta > 0 && round >= MAX_ROUNDS) {
         genLog("Maximale Runden erreicht. Bestes Ergebnis weicht um " + bestDelta + " ab. Programmatische Korrektur\u2026");
         currentText = bestText;
 
@@ -961,7 +1005,7 @@ async function generate() {
         } else {
           const currentLen = measureText(bestText, mode);
           if (currentLen !== target) {
-            genLog("Endergebnis: " + currentLen + "/" + target + " (Abweichung: " + Math.abs(currentLen - target) + "). Manuelle Anpassung ggf. nötig.");
+            genLog("Endergebnis: " + currentLen + "/" + target + " (Abweichung: " + Math.abs(currentLen - target) + "). Manuelle Anpassung ggf. n\u00f6tig.");
           }
         }
       }
